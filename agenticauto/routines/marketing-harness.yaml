@@ -1,0 +1,481 @@
+schema: nenjo.routine.v1
+manifest:
+  name: marketing_harness
+  description: Nightly marketing automation harness that checks keyword rankings, finds SEO coverage gaps, monitors Google Business Profile reviews, drafts content, and escalates negative reviews.
+  trigger:
+    type: cron
+    schedule: "0 2 * * *"
+    timezone: America/Los_Angeles
+  entry_steps:
+    - seo_monitor
+    - coverage_gap
+    - review_monitor
+  steps:
+    - ref: seo_monitor
+      name: Check Keyword Rankings
+      type: agent
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Check the tracked keyword ranking matrix for the latest period. Compare current position
+          against the prior comparable period and identify any keyword that dropped more than 3
+          positions. Include data source, checked date, previous position, current position, and
+          uncertainty.
+        metadata:
+          action: check_rankings
+    - ref: rank_drop_gate
+      name: Ranking Drop Gate
+      type: gate
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Pass only when the SEO monitor found one or more tracked keywords that dropped more
+          than 3 positions week over week. Fail when no actionable ranking drop exists or the
+          source data is insufficient for an alert.
+    - ref: rank_drop_alert
+      name: Rank Drop Alert
+      type: terminal
+      config:
+        channel: marketing
+    - ref: seo_complete
+      name: SEO Check Complete
+      type: terminal
+    - ref: coverage_gap
+      name: Find Coverage Gaps
+      type: agent
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Compare the target make and city matrix against existing ranking pages, service pages,
+          blog posts, and known content drafts. Identify coverage gaps that should receive a new
+          draft, prioritizing Tesla and European luxury vehicle queries on the Peninsula.
+        metadata:
+          action: find_coverage_gaps
+    - ref: gap_found_gate
+      name: Coverage Gap Found Gate
+      type: gate
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Pass when one or more high-value content gaps exist and can be drafted safely with
+          available shop facts. Fail when no gap exists or the missing facts would make a draft
+          speculative.
+    - ref: content_writer
+      name: Generate Content
+      type: agent
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Draft technically accurate, owner-review-ready content for the selected coverage gap.
+          Include target keyword, page angle, local signals, vehicle-specific accuracy notes,
+          unsupported claims to avoid, and review checklist. Do not publish.
+        metadata:
+          action: generate_content
+    - ref: content_ready
+      name: Content Ready for Review
+      type: terminal
+      config:
+        channel: marketing
+    - ref: coverage_complete
+      name: Coverage Check Complete
+      type: terminal
+    - ref: review_monitor
+      name: Check Reviews
+      type: agent
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Check new Google Business Profile reviews since the last run. Classify each review as
+          positive, neutral, or negative. Preserve rating, review text, author, date, vehicle or
+          service references, and whether owner follow-up is needed.
+        metadata:
+          action: check_reviews
+    - ref: negative_review_gate
+      name: Negative Review Gate
+      type: gate
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Pass when any new review is 3 stars or below or contains a clear complaint requiring
+          owner follow-up. Fail when reviews are positive or there are no new reviews requiring
+          urgent escalation.
+    - ref: escalate_review
+      name: Escalate Negative Review
+      type: terminal
+      config:
+        channel: marketing
+        priority: high
+    - ref: review_response
+      name: Draft Review Response
+      type: agent
+      agent: marketing_agent
+      config:
+        instructions: >-
+          Draft owner-review-ready responses only for positive reviews. Personalize each response
+          using specific review details, avoid defensive language, and do not post. If the
+          upstream handoff includes neutral reviews, flag them for human judgment instead of
+          auto-drafting.
+        metadata:
+          action: draft_response
+    - ref: review_response_ready
+      name: Review Response Ready
+      type: terminal
+      config:
+        channel: marketing
+  edges:
+    - from: seo_monitor
+      to: rank_drop_gate
+      metadata:
+        purpose: Evaluate ranking data for alert-worthy drops.
+        handoff_instructions: >-
+          Include all tracked keywords checked, current and previous positions, date range, data
+          source, and any keywords that crossed the drop threshold.
+        handoff_schema:
+          type: object
+          required: [checked_at, data_source, keyword_results, threshold_crossings]
+          properties:
+            checked_at:
+              type: string
+            data_source:
+              type: string
+            keyword_results:
+              type: array
+              items:
+                type: object
+                required: [keyword, previous_position, current_position, delta]
+                properties:
+                  keyword:
+                    type: string
+                  city:
+                    type: ["string", "null"]
+                  make:
+                    type: ["string", "null"]
+                  previous_position:
+                    type: ["integer", "null"]
+                  current_position:
+                    type: ["integer", "null"]
+                  delta:
+                    type: ["integer", "null"]
+                additionalProperties: false
+            threshold_crossings:
+              type: array
+              items:
+                type: string
+            uncertainty:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: rank_drop_gate
+      to: rank_drop_alert
+      condition: on_pass
+      metadata:
+        purpose: Send actionable rank drops to the marketing channel.
+        handoff_instructions: >-
+          Include only actionable drops, with previous/current positions, affected city and make,
+          likely impact, and recommended owner-facing next action.
+        handoff_schema:
+          type: object
+          required: [alerts, recommended_actions]
+          properties:
+            alerts:
+              type: array
+              items:
+                type: object
+                required: [keyword, previous_position, current_position, drop]
+                properties:
+                  keyword:
+                    type: string
+                  previous_position:
+                    type: integer
+                  current_position:
+                    type: integer
+                  drop:
+                    type: integer
+                  impact:
+                    type: string
+                additionalProperties: false
+            recommended_actions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: rank_drop_gate
+      to: seo_complete
+      condition: on_fail
+      metadata:
+        purpose: Complete the SEO ranking branch when no alert is needed.
+        handoff_instructions: >-
+          Include the reason no alert was generated and any data-quality concerns to review later.
+        handoff_schema:
+          type: object
+          required: [reason, data_quality_notes]
+          properties:
+            reason:
+              type: string
+            data_quality_notes:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: coverage_gap
+      to: gap_found_gate
+      metadata:
+        purpose: Evaluate content coverage gaps for safe drafting.
+        handoff_instructions: >-
+          Include prioritized gaps, existing competing or related pages, missing facts, keyword
+          value, and whether each gap has enough source material for a draft.
+        handoff_schema:
+          type: object
+          required: [gaps, missing_facts]
+          properties:
+            gaps:
+              type: array
+              items:
+                type: object
+                required: [keyword, make, city, priority, draftable]
+                properties:
+                  keyword:
+                    type: string
+                  make:
+                    type: string
+                  city:
+                    type: string
+                  priority:
+                    type: string
+                    enum: [high, medium, low]
+                  draftable:
+                    type: boolean
+                  existing_related_pages:
+                    type: array
+                    items:
+                      type: string
+                additionalProperties: false
+            missing_facts:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: gap_found_gate
+      to: content_writer
+      condition: on_pass
+      metadata:
+        purpose: Send the highest-value draftable content gap to content generation.
+        handoff_instructions: >-
+          Include the selected gap, target keyword, page angle, local signals, source facts,
+          unsupported claims to avoid, and approval checklist.
+        handoff_schema:
+          type: object
+          required: [selected_gap, source_facts, claims_to_avoid, approval_checklist]
+          properties:
+            selected_gap:
+              type: object
+              required: [keyword, make, city, page_angle]
+              properties:
+                keyword:
+                  type: string
+                make:
+                  type: string
+                city:
+                  type: string
+                page_angle:
+                  type: string
+              additionalProperties: false
+            source_facts:
+              type: array
+              items:
+                type: string
+            claims_to_avoid:
+              type: array
+              items:
+                type: string
+            approval_checklist:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: gap_found_gate
+      to: coverage_complete
+      condition: on_fail
+      metadata:
+        purpose: Complete the coverage branch when no safe content draft is needed.
+        handoff_instructions: >-
+          Include why no content was drafted and what evidence should be collected for future
+          drafting if the gap remains important.
+        handoff_schema:
+          type: object
+          required: [reason, future_evidence_needed]
+          properties:
+            reason:
+              type: string
+            future_evidence_needed:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: content_writer
+      to: content_ready
+      metadata:
+        purpose: Send drafted marketing content to owner review.
+        handoff_instructions: >-
+          Include the draft artifact or text, target keyword, local SEO notes, accuracy caveats,
+          and owner approval checklist. Confirm that nothing was published.
+        handoff_schema:
+          type: object
+          required: [draft_title, target_keyword, draft_summary, accuracy_caveats, owner_review_required, published]
+          properties:
+            draft_title:
+              type: string
+            target_keyword:
+              type: string
+            draft_summary:
+              type: string
+            artifact_ref:
+              type: ["string", "null"]
+            accuracy_caveats:
+              type: array
+              items:
+                type: string
+            owner_review_required:
+              type: boolean
+              const: true
+            published:
+              type: boolean
+              const: false
+          additionalProperties: false
+    - from: review_monitor
+      to: negative_review_gate
+      metadata:
+        purpose: Evaluate new reviews for urgent owner escalation.
+        handoff_instructions: >-
+          Include every new review, rating, reviewer, review text, date, sentiment, and whether
+          the review requires owner follow-up.
+        handoff_schema:
+          type: object
+          required: [checked_at, reviews]
+          properties:
+            checked_at:
+              type: string
+            reviews:
+              type: array
+              items:
+                type: object
+                required: [rating, author, text, sentiment, owner_follow_up_needed]
+                properties:
+                  rating:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                  author:
+                    type: string
+                  text:
+                    type: string
+                  posted_at:
+                    type: ["string", "null"]
+                  sentiment:
+                    type: string
+                    enum: [positive, neutral, negative]
+                  owner_follow_up_needed:
+                    type: boolean
+                additionalProperties: false
+          additionalProperties: false
+    - from: negative_review_gate
+      to: escalate_review
+      condition: on_pass
+      metadata:
+        purpose: Escalate negative or complaint-bearing reviews for owner follow-up.
+        handoff_instructions: >-
+          Include the negative review context, urgency, suggested private follow-up talking
+          points, and the 24-hour owner response target. Do not draft a public response.
+        handoff_schema:
+          type: object
+          required: [negative_reviews, urgency, private_follow_up_points, public_response_drafted]
+          properties:
+            negative_reviews:
+              type: array
+              items:
+                type: object
+                required: [rating, author, text]
+                properties:
+                  rating:
+                    type: integer
+                  author:
+                    type: string
+                  text:
+                    type: string
+                additionalProperties: false
+            urgency:
+              type: string
+              enum: [high]
+            private_follow_up_points:
+              type: array
+              items:
+                type: string
+            public_response_drafted:
+              type: boolean
+              const: false
+          additionalProperties: false
+    - from: negative_review_gate
+      to: review_response
+      condition: on_fail
+      metadata:
+        purpose: Route positive reviews to response drafting when no negative escalation is needed.
+        handoff_instructions: >-
+          Include positive reviews eligible for response drafts, details to personalize, and any
+          neutral reviews that should be excluded or human-reviewed.
+        handoff_schema:
+          type: object
+          required: [positive_reviews, excluded_reviews]
+          properties:
+            positive_reviews:
+              type: array
+              items:
+                type: object
+                required: [rating, author, text, personalization_details]
+                properties:
+                  rating:
+                    type: integer
+                    minimum: 4
+                    maximum: 5
+                  author:
+                    type: string
+                  text:
+                    type: string
+                  personalization_details:
+                    type: array
+                    items:
+                      type: string
+                additionalProperties: false
+            excluded_reviews:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: review_response
+      to: review_response_ready
+      metadata:
+        purpose: Send positive review response drafts to owner review.
+        handoff_instructions: >-
+          Include response drafts, source review refs, personalization notes, and confirmation
+          that nothing was posted.
+        handoff_schema:
+          type: object
+          required: [drafts, posted]
+          properties:
+            drafts:
+              type: array
+              items:
+                type: object
+                required: [author, response_text]
+                properties:
+                  author:
+                    type: string
+                  response_text:
+                    type: string
+                  source_review_ref:
+                    type: ["string", "null"]
+                additionalProperties: false
+            posted:
+              type: boolean
+              const: false
+          additionalProperties: false
