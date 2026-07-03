@@ -9,7 +9,7 @@ manifest:
     - ref: transcribe
       name: Transcribe Audio
       type: agent
-      agent: agents/inspection-agent.yaml
+      agent: inspection_agent
       config:
         instructions: >-
           Convert the incoming technician inspection audio or transcript into a clean working
@@ -21,7 +21,7 @@ manifest:
     - ref: parse_inspection
       name: Parse Inspection Transcript
       type: agent
-      agent: agents/inspection-agent.yaml
+      agent: inspection_agent
       config:
         instructions: >-
           Analyze the normalized inspection transcript and return structured inspection findings:
@@ -33,7 +33,7 @@ manifest:
     - ref: inspection_quality_gate
       name: Inspection Quality Gate
       type: gate
-      agent: agents/inspection-agent.yaml
+      agent: inspection_agent
       config:
         instructions: >-
           Pass only when the parsed inspection contains enough vehicle identity, issue detail,
@@ -43,7 +43,7 @@ manifest:
     - ref: parts_lookup
       name: Parallel Vendor Lookup
       type: agent
-      agent: agents/parts-agent.yaml
+      agent: parts_agent
       config:
         instructions: >-
           Source each requested part from configured vendors in parallel. Compare price,
@@ -54,7 +54,7 @@ manifest:
     - ref: labor_estimate
       name: Calculate Labor
       type: agent
-      agent: agents/bay-agent.yaml
+      agent: bay_agent
       config:
         instructions: >-
           Calculate labor for each parsed issue using the inspection findings and vehicle context.
@@ -65,7 +65,7 @@ manifest:
     - ref: assemble_estimate
       name: Assemble Estimate
       type: agent
-      agent: agents/parts-agent.yaml
+      agent: parts_agent
       config:
         instructions: >-
           Join the parts lookup and labor estimate handoffs into one estimate-ready package.
