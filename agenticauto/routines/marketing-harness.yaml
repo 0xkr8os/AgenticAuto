@@ -14,7 +14,7 @@ manifest:
     - ref: seo_monitor
       name: Check Keyword Rankings
       type: agent
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Check the tracked keyword ranking matrix for the latest period. Compare current position
@@ -26,7 +26,7 @@ manifest:
     - ref: rank_drop_gate
       name: Ranking Drop Gate
       type: gate
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Pass only when the SEO monitor found one or more tracked keywords that dropped more
@@ -43,7 +43,7 @@ manifest:
     - ref: coverage_gap
       name: Find Coverage Gaps
       type: agent
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Compare the target make and city matrix against existing ranking pages, service pages,
@@ -54,7 +54,7 @@ manifest:
     - ref: gap_found_gate
       name: Coverage Gap Found Gate
       type: gate
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Pass when one or more high-value content gaps exist and can be drafted safely with
@@ -63,7 +63,7 @@ manifest:
     - ref: content_writer
       name: Generate Content
       type: agent
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Draft technically accurate, owner-review-ready content for the selected coverage gap.
@@ -82,7 +82,7 @@ manifest:
     - ref: review_monitor
       name: Check Reviews
       type: agent
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Check new Google Business Profile reviews since the last run. Classify each review as
@@ -93,7 +93,7 @@ manifest:
     - ref: negative_review_gate
       name: Negative Review Gate
       type: gate
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Pass when any new review is 3 stars or below or contains a clear complaint requiring
@@ -108,7 +108,7 @@ manifest:
     - ref: review_response
       name: Draft Review Response
       type: agent
-      agent: marketing_agent
+      agent: agents/marketing-agent.yaml
       config:
         instructions: >-
           Draft owner-review-ready responses only for positive reviews. Personalize each response
