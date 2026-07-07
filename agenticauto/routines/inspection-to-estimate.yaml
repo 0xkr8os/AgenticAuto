@@ -1,0 +1,467 @@
+schema: nenjo.routine.v1
+manifest:
+  name: inspection_to_estimate
+  description: Converts a raw technician inspection into a complete customer estimate by transcribing, parsing, validating, sourcing parts, calculating labor, and assembling the final estimate.
+  trigger: task
+  entry_steps:
+    - transcribe
+  steps:
+    - ref: transcribe
+      name: Transcribe Audio
+      type: agent
+      agent: inspection_agent
+      config:
+        instructions: >-
+          Convert the incoming technician inspection audio or transcript into a clean working
+          transcript. Preserve vehicle identity, customer complaint, issue observations,
+          measurements, location callouts, and technician uncertainty. If the input is already a
+          transcript, normalize obvious speech-to-text errors without inventing missing facts.
+        metadata:
+          action: transcribe_audio
+    - ref: parse_inspection
+      name: Parse Inspection Transcript
+      type: agent
+      agent: inspection_agent
+      config:
+        instructions: >-
+          Analyze the normalized inspection transcript and return structured inspection findings:
+          issues, severity, safety-critical flags, parts needed, estimated labor hours, and
+          unresolved ambiguity. Use conservative severity and labor estimates. Do not source parts
+          or assemble the final estimate.
+        metadata:
+          action: parse_transcript
+    - ref: inspection_quality_gate
+      name: Inspection Quality Gate
+      type: gate
+      agent: inspection_agent
+      config:
+        instructions: >-
+          Pass only when the parsed inspection contains enough vehicle identity, issue detail,
+          severity, parts/labor implications, and ambiguity notes for downstream parts and labor
+          work. Fail when safety-critical or estimate-blocking facts are missing and human review
+          is required.
+    - ref: parts_lookup
+      name: Parallel Vendor Lookup
+      type: agent
+      agent: parts_agent
+      config:
+        instructions: >-
+          Source each requested part from configured vendors in parallel. Compare price,
+          availability, ETA, OEM/aftermarket status, and backorder risk. Return recommended
+          sourcing options, unresolved part ambiguities, and any allowance or approval concerns.
+        metadata:
+          action: parallel_vendor_lookup
+    - ref: labor_estimate
+      name: Calculate Labor
+      type: agent
+      agent: bay_agent
+      config:
+        instructions: >-
+          Calculate labor for each parsed issue using the inspection findings and vehicle context.
+          Preserve the inspection agent's severity and safety flags, call out sublet needs, and
+          identify any bay constraints or missing information that affects labor confidence.
+        metadata:
+          action: calculate_labor
+    - ref: assemble_estimate
+      name: Assemble Estimate
+      type: agent
+      agent: parts_agent
+      config:
+        instructions: >-
+          Join the parts lookup and labor estimate handoffs into one estimate-ready package.
+          Keep the source handoffs distinct, reconcile conflicts, do not invent missing prices or
+          hours, and call out unresolved risks that require service-advisor or owner review.
+        metadata:
+          action: assemble_estimate
+    - ref: notify_estimates
+      name: Notify Estimate Ready
+      type: terminal
+    - ref: needs_human_review
+      name: Needs Human Review
+      type: terminal_fail
+  edges:
+    - from: transcribe
+      to: parse_inspection
+      metadata:
+        purpose: Send normalized technician observations to structured inspection parsing.
+        handoff_instructions: >-
+          Include the normalized transcript, vehicle identifiers found, raw ambiguous phrases, and
+          any sections that could not be confidently transcribed.
+        handoff_schema:
+          type: object
+          required: [normalized_transcript, vehicle, ambiguous_phrases]
+          properties:
+            normalized_transcript:
+              type: string
+              minLength: 1
+            vehicle:
+              type: object
+              required: [year, make, model]
+              properties:
+                year:
+                  type: ["string", "null"]
+                make:
+                  type: ["string", "null"]
+                model:
+                  type: ["string", "null"]
+                vin:
+                  type: ["string", "null"]
+                mileage:
+                  type: ["string", "null"]
+              additionalProperties: false
+            ambiguous_phrases:
+              type: array
+              items:
+                type: string
+            transcription_notes:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: parse_inspection
+      to: inspection_quality_gate
+      metadata:
+        purpose: Validate that inspection findings are complete enough for estimate work.
+        handoff_instructions: >-
+          Include parsed issues, parts, labor estimate summary, safety flags, and unresolved
+          questions that may block sourcing or labor calculation.
+        handoff_schema:
+          type: object
+          required: [issues, parts_needed, estimated_hours, severity_summary, immediate_action_required, unresolved_questions]
+          properties:
+            issues:
+              type: array
+              items:
+                type: object
+                required: [description, severity, location, customer_note, safety_critical]
+                properties:
+                  description:
+                    type: string
+                  severity:
+                    type: string
+                    enum: [critical, important, monitor]
+                  location:
+                    type: string
+                  customer_note:
+                    type: string
+                  safety_critical:
+                    type: boolean
+                additionalProperties: false
+            parts_needed:
+              type: array
+              items:
+                type: object
+                required: [description, quantity, related_issue_index]
+                properties:
+                  description:
+                    type: string
+                  oem_part_number_guess:
+                    type: ["string", "null"]
+                  quantity:
+                    type: integer
+                    minimum: 1
+                  related_issue_index:
+                    type: integer
+                    minimum: 0
+                additionalProperties: false
+            estimated_hours:
+              type: object
+              required: [total]
+              properties:
+                total:
+                  type: number
+                  minimum: 0
+                by_issue:
+                  type: array
+                  items:
+                    type: object
+                    required: [issue_index, hours]
+                    properties:
+                      issue_index:
+                        type: integer
+                        minimum: 0
+                      hours:
+                        type: number
+                        minimum: 0
+                      note:
+                        type: string
+                    additionalProperties: false
+              additionalProperties: false
+            severity_summary:
+              type: string
+              enum: [critical, important, monitor, pass]
+            immediate_action_required:
+              type: boolean
+            unresolved_questions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: inspection_quality_gate
+      to: parts_lookup
+      condition: on_pass
+      metadata:
+        purpose: Route validated part requirements to vendor sourcing.
+        handoff_instructions: >-
+          Include vehicle identity, validated issue list, required parts, confidence level for OEM
+          part guesses, safety-critical flags, and open sourcing questions.
+        handoff_schema:
+          type: object
+          required: [vehicle, issues, parts_needed, safety_critical, sourcing_questions]
+          properties:
+            vehicle:
+              type: object
+              required: [year, make, model]
+              properties:
+                year:
+                  type: ["string", "null"]
+                make:
+                  type: ["string", "null"]
+                model:
+                  type: ["string", "null"]
+                vin:
+                  type: ["string", "null"]
+              additionalProperties: false
+            issues:
+              type: array
+              items:
+                type: object
+                required: [description, severity, location]
+                properties:
+                  description:
+                    type: string
+                  severity:
+                    type: string
+                    enum: [critical, important, monitor]
+                  location:
+                    type: string
+                additionalProperties: false
+            parts_needed:
+              type: array
+              items:
+                type: object
+                required: [description, quantity, related_issue_index]
+                properties:
+                  description:
+                    type: string
+                  oem_part_number_guess:
+                    type: ["string", "null"]
+                  quantity:
+                    type: integer
+                    minimum: 1
+                  related_issue_index:
+                    type: integer
+                    minimum: 0
+                additionalProperties: false
+            safety_critical:
+              type: boolean
+            sourcing_questions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: inspection_quality_gate
+      to: labor_estimate
+      condition: on_pass
+      metadata:
+        purpose: Route validated repair findings to labor calculation.
+        handoff_instructions: >-
+          Include vehicle identity, issues, estimated hours by issue, access/sublet notes, safety
+          flags, and labor confidence concerns.
+        handoff_schema:
+          type: object
+          required: [vehicle, issues, estimated_hours, sublet_needs, labor_questions]
+          properties:
+            vehicle:
+              type: object
+              required: [year, make, model]
+              properties:
+                year:
+                  type: ["string", "null"]
+                make:
+                  type: ["string", "null"]
+                model:
+                  type: ["string", "null"]
+                vin:
+                  type: ["string", "null"]
+              additionalProperties: false
+            issues:
+              type: array
+              items:
+                type: object
+                required: [description, severity, location, safety_critical]
+                properties:
+                  description:
+                    type: string
+                  severity:
+                    type: string
+                    enum: [critical, important, monitor]
+                  location:
+                    type: string
+                  safety_critical:
+                    type: boolean
+                additionalProperties: false
+            estimated_hours:
+              type: object
+              required: [total]
+              properties:
+                total:
+                  type: number
+                  minimum: 0
+              additionalProperties: true
+            sublet_needs:
+              type: array
+              items:
+                type: string
+            labor_questions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: inspection_quality_gate
+      to: needs_human_review
+      condition: on_fail
+      metadata:
+        purpose: Stop estimate automation when inspection data is not safe to use.
+        handoff_instructions: >-
+          Include the failed criteria, missing facts, safety concerns, and exact questions a human
+          reviewer or technician must answer before estimate work resumes.
+        handoff_schema:
+          type: object
+          required: [failed_criteria, missing_facts, safety_concerns, reviewer_questions]
+          properties:
+            failed_criteria:
+              type: array
+              items:
+                type: string
+            missing_facts:
+              type: array
+              items:
+                type: string
+            safety_concerns:
+              type: array
+              items:
+                type: string
+            reviewer_questions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: parts_lookup
+      to: assemble_estimate
+      metadata:
+        purpose: Provide sourced parts options for final estimate assembly.
+        handoff_instructions: >-
+          Include selected vendor options, part prices, availability, ETA, backorder risks,
+          allowance or approval warnings, and unresolved sourcing questions.
+        handoff_schema:
+          type: object
+          required: [part_options, selected_recommendations, backorder_risks, approval_warnings, unresolved_questions]
+          properties:
+            part_options:
+              type: array
+              items:
+                type: object
+                required: [description, vendor, price, availability]
+                properties:
+                  description:
+                    type: string
+                  vendor:
+                    type: string
+                  part_number:
+                    type: ["string", "null"]
+                  price:
+                    type: number
+                    minimum: 0
+                  availability:
+                    type: string
+                  eta:
+                    type: ["string", "null"]
+                additionalProperties: false
+            selected_recommendations:
+              type: array
+              items:
+                type: string
+            backorder_risks:
+              type: array
+              items:
+                type: string
+            approval_warnings:
+              type: array
+              items:
+                type: string
+            unresolved_questions:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: labor_estimate
+      to: assemble_estimate
+      metadata:
+        purpose: Provide labor calculations for final estimate assembly.
+        handoff_instructions: >-
+          Include labor lines, hours, sublet needs, technician notes, confidence level, and any
+          issue that should be reviewed before sending an estimate to the customer.
+        handoff_schema:
+          type: object
+          required: [labor_lines, total_hours, sublet_needs, confidence, review_notes]
+          properties:
+            labor_lines:
+              type: array
+              items:
+                type: object
+                required: [description, hours]
+                properties:
+                  description:
+                    type: string
+                  hours:
+                    type: number
+                    minimum: 0
+                  related_issue_index:
+                    type: ["integer", "null"]
+                additionalProperties: false
+            total_hours:
+              type: number
+              minimum: 0
+            sublet_needs:
+              type: array
+              items:
+                type: string
+            confidence:
+              type: string
+              enum: [high, medium, low]
+            review_notes:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+    - from: assemble_estimate
+      to: notify_estimates
+      metadata:
+        purpose: Complete the workflow with an estimate-ready package for service advisor review.
+        handoff_instructions: >-
+          Include the final estimate summary, parts and labor totals, safety-critical customer
+          notes, unresolved review items, and whether the estimate is ready for customer review.
+        handoff_schema:
+          type: object
+          required: [estimate_summary, parts_total, labor_total_hours, safety_notes, review_items, ready_for_customer_review]
+          properties:
+            estimate_summary:
+              type: string
+            parts_total:
+              type: number
+              minimum: 0
+            labor_total_hours:
+              type: number
+              minimum: 0
+            safety_notes:
+              type: array
+              items:
+                type: string
+            review_items:
+              type: array
+              items:
+                type: string
+            ready_for_customer_review:
+              type: boolean
+          additionalProperties: false

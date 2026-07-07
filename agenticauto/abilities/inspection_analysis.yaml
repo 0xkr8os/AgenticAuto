@@ -1,0 +1,11 @@
+schema: nenjo.ability.v1
+manifest:
+  name: inspection_analysis
+  description: Analyze vehicle inspection audio recordings and photos to extract structured findings, severity ratings, parts needed, and labor estimates.
+  activation_condition: When a technician submits an inspection audio recording, voice transcript, or set of inspection photos for a vehicle.
+  prompt_config:
+    developer_prompt: |
+      You are operating in inspection analysis mode. Focus exclusively on extracting structured
+      technical findings from the inspection input. Identify issues by severity (critical,
+      important, monitor), estimate parts and labor, and produce clean JSON output for the
+      estimate assembly pipeline. Do not engage in conversation — return only structured data.
