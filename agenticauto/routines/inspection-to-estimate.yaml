@@ -1,35 +1,23 @@
 schema: nenjo.routine.v1
 manifest:
   name: inspection_to_estimate
-  description: Converts a raw technician inspection into a complete customer estimate by transcribing, parsing, validating, sourcing parts, calculating labor, and assembling the final estimate.
+  description: Converts a technician inspection task into a complete customer estimate by parsing, validating, sourcing parts, calculating labor, and assembling the final estimate.
   trigger: task
   entry_steps:
-    - transcribe
+    - parse_inspection
   steps:
-    - ref: transcribe
-      name: Transcribe Audio
-      type: agent
-      agent: inspection_agent
-      config:
-        instructions: >-
-          Convert the incoming technician inspection audio or transcript into a clean working
-          transcript. Preserve vehicle identity, customer complaint, issue observations,
-          measurements, location callouts, and technician uncertainty. If the input is already a
-          transcript, normalize obvious speech-to-text errors without inventing missing facts.
-        metadata:
-          action: transcribe_audio
     - ref: parse_inspection
-      name: Parse Inspection Transcript
+      name: Parse Inspection Task
       type: agent
       agent: inspection_agent
       config:
         instructions: >-
-          Analyze the normalized inspection transcript and return structured inspection findings:
+          Analyze the incoming inspection task and return structured inspection findings:
           issues, severity, safety-critical flags, parts needed, estimated labor hours, and
           unresolved ambiguity. Use conservative severity and labor estimates. Do not source parts
           or assemble the final estimate.
         metadata:
-          action: parse_transcript
+          action: parse_inspection
     - ref: inspection_quality_gate
       name: Inspection Quality Gate
       type: gate
@@ -80,44 +68,6 @@ manifest:
       name: Needs Human Review
       type: terminal_fail
   edges:
-    - from: transcribe
-      to: parse_inspection
-      metadata:
-        purpose: Send normalized technician observations to structured inspection parsing.
-        handoff_instructions: >-
-          Include the normalized transcript, vehicle identifiers found, raw ambiguous phrases, and
-          any sections that could not be confidently transcribed.
-        handoff_schema:
-          type: object
-          required: [normalized_transcript, vehicle, ambiguous_phrases]
-          properties:
-            normalized_transcript:
-              type: string
-              minLength: 1
-            vehicle:
-              type: object
-              required: [year, make, model]
-              properties:
-                year:
-                  type: ["string", "null"]
-                make:
-                  type: ["string", "null"]
-                model:
-                  type: ["string", "null"]
-                vin:
-                  type: ["string", "null"]
-                mileage:
-                  type: ["string", "null"]
-              additionalProperties: false
-            ambiguous_phrases:
-              type: array
-              items:
-                type: string
-            transcription_notes:
-              type: array
-              items:
-                type: string
-          additionalProperties: false
     - from: parse_inspection
       to: inspection_quality_gate
       metadata:
