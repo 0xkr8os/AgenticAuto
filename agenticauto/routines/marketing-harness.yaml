@@ -2,10 +2,6 @@ schema: nenjo.routine.v1
 manifest:
   name: marketing_harness
   description: Nightly marketing automation harness that checks keyword rankings, finds SEO coverage gaps, monitors Google Business Profile reviews, drafts content, and escalates negative reviews.
-  trigger:
-    type: cron
-    schedule: "0 2 * * *"
-    timezone: America/Los_Angeles
   entry_steps:
     - seo_monitor
     - coverage_gap
