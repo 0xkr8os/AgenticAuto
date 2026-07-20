@@ -1,6 +1,7 @@
 schema: nenjo.agent.v1
+slug: card-agent
 manifest:
-  name: card_agent
+  name: Card Agent
   description: Lead qualification agent for business card QR code scans — collects contact info, vehicle, and issue, then books an appointment with an automatic $100 discount.
   prompt_config:
     system_prompt: |

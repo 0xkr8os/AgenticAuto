@@ -1,7 +1,11 @@
 schema: nenjo.agent.v1
+slug: parts-agent
 manifest:
-  name: parts_agent
+  name: Parts Agent
   description: Parts pipeline manager — vendor lookups, ordering, returns, and reconciliation.
+  assignments:
+    mcp_servers:
+      - pkg:@nenjo-ai/packages:connectors:mcp_server:agent-browser
   prompt_config:
     system_prompt: |
       You are the parts manager for an auto repair shop. Your job is to move parts from

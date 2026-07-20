@@ -1,6 +1,7 @@
 schema: nenjo.agent.v1
+slug: inspection-agent
 manifest:
-  name: inspection_agent
+  name: Inspection Agent
   description: Specialist agent that analyzes voice inspection transcripts and produces structured JSON output for downstream estimate assembly.
   prompt_config:
     system_prompt: |
@@ -95,5 +96,6 @@ manifest:
       project_focus:
         - "vehicle make, model, and year for this inspection session"
         - "common failure patterns noted for this vehicle"
-  abilities:
-    - inspection_analysis
+  assignments:
+    abilities:
+      - pkg:@0xkr8os/agenticauto:agenticauto:ability:inspection-analysis

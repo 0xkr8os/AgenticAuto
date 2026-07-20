@@ -1,4 +1,5 @@
 schema: nenjo.routine.v1
+slug: inspection-to-estimate
 manifest:
   name: inspection_to_estimate
   description: Converts a technician inspection task into a complete customer estimate by parsing, validating, sourcing parts, calculating labor, and assembling the final estimate.
@@ -8,7 +9,7 @@ manifest:
     - ref: parse_inspection
       name: Parse Inspection Task
       type: agent
-      agent: inspection_agent
+      agent: inspection-agent
       config:
         instructions: >-
           Analyze the incoming inspection task and return structured inspection findings:
@@ -20,7 +21,7 @@ manifest:
     - ref: inspection_quality_gate
       name: Inspection Quality Gate
       type: gate
-      agent: inspection_agent
+      agent: inspection-agent
       config:
         instructions: >-
           Pass only when the parsed inspection contains enough vehicle identity, issue detail,
@@ -30,7 +31,7 @@ manifest:
     - ref: parts_lookup
       name: Parallel Vendor Lookup
       type: agent
-      agent: parts_agent
+      agent: parts-agent
       config:
         instructions: >-
           Source each requested part from configured vendors in parallel. Compare price,
@@ -41,7 +42,7 @@ manifest:
     - ref: labor_estimate
       name: Calculate Labor
       type: agent
-      agent: bay_agent
+      agent: bay-agent
       config:
         instructions: >-
           Calculate labor for each parsed issue using the inspection findings and vehicle context.
@@ -52,7 +53,7 @@ manifest:
     - ref: assemble_estimate
       name: Assemble Estimate
       type: agent
-      agent: parts_agent
+      agent: parts-agent
       config:
         instructions: >-
           Join the parts lookup and labor estimate handoffs into one estimate-ready package.

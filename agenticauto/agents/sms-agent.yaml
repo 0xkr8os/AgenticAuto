@@ -1,6 +1,7 @@
 schema: nenjo.agent.v1
+slug: sms-agent
 manifest:
-  name: sms_agent
+  name: SMS Agent
   description: Customer-facing SMS service advisor that guides callers from first contact through appointment booking.
   prompt_config:
     system_prompt: |

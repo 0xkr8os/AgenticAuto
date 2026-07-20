@@ -1,4 +1,5 @@
 schema: nenjo.ability.v1
+slug: inspection-analysis
 manifest:
   name: inspection_analysis
   description: Analyze vehicle inspection audio recordings and photos to extract structured findings, severity ratings, parts needed, and labor estimates.

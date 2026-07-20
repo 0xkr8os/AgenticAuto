@@ -6,6 +6,5 @@ packages:
 registries:
   - kind: git
     url: https://github.com/nenjo-ai/packages
-    reference: 08a92b9a3e1361d4091e7b8e826ae5541c9ca6e5
+    reference: 591de608e9202de6e7542e883b1425ea36e020e3
     manifest_path: packages.yaml
-

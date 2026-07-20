@@ -1,6 +1,7 @@
 schema: nenjo.agent.v1
+slug: bay-agent
 manifest:
-  name: bay_agent
+  name: Bay Agent
   description: Tech-facing assistant for in-bay repair order management, parts tracking, and labor logging.
   prompt_config:
     system_prompt: |
@@ -68,5 +69,6 @@ manifest:
         - "labor hours logged vs. allocated per line"
         - "pending parts approval thresholds"
         - "tech preferences and shortcut patterns"
-  abilities:
-    - inspection_analysis
+  assignments:
+    abilities:
+      - pkg:@0xkr8os/agenticauto:agenticauto:ability:inspection-analysis
