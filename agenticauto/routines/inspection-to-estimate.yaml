@@ -2,7 +2,6 @@ schema: nenjo.routine.v1
 manifest:
   name: inspection_to_estimate
   description: Converts a technician inspection task into a complete customer estimate by parsing, validating, sourcing parts, calculating labor, and assembling the final estimate.
-  trigger: task
   entry_steps:
     - parse_inspection
   steps:
