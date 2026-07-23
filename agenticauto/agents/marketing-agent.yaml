@@ -1,6 +1,7 @@
 schema: nenjo.agent.v1
+slug: marketing-agent
 manifest:
-  name: marketing_agent
+  name: Marketing Agent
   description: Marketing and local SEO orchestrator — monitors digital footprint, generates content, tracks rankings, and manages review responses.
   prompt_config:
     system_prompt: |

@@ -1,10 +1,11 @@
 schema: nenjo.package.v1
 name: "agenticauto"
-version: "0.1.0"
+version: "0.2.0"
 description: Autonomous auto repair shop operating system built on Nenjo.
 dependencies:
-  "@nenjo-ai/context": "^1.0.4"
-  "@nenjo-ai/nenji": "^1.2.0"
+  "@nenjo-ai/connectors": "^1.1.0"
+  "@nenjo-ai/capabilities": "^1.0.0"
+  "@nenjo-ai/context": "^1.1.0"
 arguments:
   - name: shop_name
     selector: args.shop.name

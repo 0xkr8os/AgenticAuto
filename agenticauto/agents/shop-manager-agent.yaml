@@ -1,4 +1,5 @@
 schema: nenjo.agent.v1
+slug: shop-manager
 manifest:
   name: Shop Manager
   description: Shop operations manager that turns shop needs into managed tasks and delegates them to the appropriate specialist agent or routine.
@@ -8,7 +9,8 @@ manifest:
     - routines:read
   assignments:
     abilities:
-      - nenjo/nenji/capabilities/build/manage_tasks.yaml
+      - pkg:@nenjo-ai/packages:capabilities:ability:manage-tasks
+
   prompt_config:
     system_prompt: |
       You are the operations manager for an auto repair shop. You coordinate work across the
